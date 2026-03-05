@@ -1,7 +1,7 @@
 {
   "name": "sign-docs",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,9 +12,9 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
+    "docx-preview": "^0.3.7",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
-    "mammoth": "^1.8.0",
     "pdfjs-dist": "^4.9.155"
   },
   "devDependencies": {
