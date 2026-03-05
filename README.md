@@ -5,19 +5,35 @@
 
 [中文文档](README.zh.md)
 
-SignDocs is a desktop application that lets you open PDF and Word documents, add electronic seals and handwritten signatures, and export the result as a PDF file. Everything runs locally — no upload, no internet required.
+A lightweight, privacy-first desktop app for signing and stamping documents. Open PDF or Word files, generate official-looking company seals, draw handwritten signatures, and export everything as a single PDF — all offline, no data ever leaves your machine.
 
-## What you can do
+Built with [Tauri](https://tauri.app/) + Vanilla JS. Runs on macOS, Windows and Linux.
 
-- Open PDF and Word (DOCX/DOC) documents
-- Place an electronic seal anywhere on the document — upload your own image or generate a circular company seal in the app
-- Draw a handwritten signature and drop it wherever you need
-- Add moveable text boxes to annotate or fill in information
-- Export the finished document as a PDF
+![SignDocs Screenshot](docs/screenshot.png)
+
+## Features
+
+- **Open Documents** — PDF and Word (DOCX/DOC) with faithful rendering via `pdf.js` and `docx-preview`
+- **Electronic Seal** — Upload your own seal image or generate a circular Chinese company seal with custom text, star, and serial number
+- **Handwritten Signature** — Draw smooth signatures with pressure-sensitive Bezier curves in a dedicated signing pad; pick pen color freely
+- **Text Boxes** — Add draggable, editable text overlays anywhere on the document
+- **Export to PDF** — One-click export with all seals, signatures and annotations baked in
+- **Offline & Private** — Zero network calls, zero telemetry; your documents stay on your computer
+
+## Quick Start
+
+```bash
+# Development (browser)
+npm install
+npm run dev          # → http://localhost:1420
+
+# Desktop app (Tauri)
+npm run tauri dev
+```
 
 ## Download
 
-Get the latest version from the [Releases page](https://github.com/Createitv/sign-docs/releases/latest).
+Pre-built binaries are available on the [Releases page](https://github.com/Createitv/sign-docs/releases/latest).
 
 | Platform | File |
 |----------|------|
@@ -26,6 +42,16 @@ Get the latest version from the [Releases page](https://github.com/Createitv/sig
 | Windows | `SignDocs_*_x64-setup.exe` |
 | Linux | `SignDocs_*_amd64.AppImage` |
 
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Shell | [Tauri 2](https://tauri.app/) (Rust) |
+| Frontend | Vanilla JS + Vite |
+| PDF Render | [pdf.js](https://mozilla.github.io/pdf.js/) |
+| DOCX Render | [docx-preview](https://github.com/VolodymyrBayworker/docx-preview) |
+| PDF Export | [jsPDF](https://github.com/parallax/jsPDF) + [html2canvas](https://html2canvas.hertzen.com/) |
+
 ## License
 
-MIT
+[MIT](LICENSE) — free for personal and commercial use.
