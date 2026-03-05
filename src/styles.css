@@ -354,9 +354,9 @@ select.font-select {
 
 .pdf-container canvas {
   display: block;
-  width: 100%;
   margin-bottom: 16px;
   border: 1px solid var(--border);
+  max-width: 100%;
 }
 
 /* ---- Placed elements ---- */

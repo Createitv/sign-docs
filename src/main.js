@@ -107,6 +107,7 @@ async function renderPDF(base64, fileName) {
 
   const docPage = document.getElementById('docPage');
   const pageWidth = docPage.clientWidth - 112; // subtract padding
+  const dpr = window.devicePixelRatio || 1;
 
   for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
     const page = await pdfDoc.getPage(pageNum);
@@ -114,15 +115,21 @@ async function renderPDF(base64, fileName) {
     const viewport = page.getViewport({ scale });
 
     const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    canvas.style.width = '100%';
+    // Buffer size accounts for device pixel ratio (crisp on Retina/HiDPI)
+    canvas.width = Math.floor(viewport.width * dpr);
+    canvas.height = Math.floor(viewport.height * dpr);
+    // CSS display size in logical pixels (preserves aspect ratio)
+    canvas.style.width = viewport.width + 'px';
+    canvas.style.height = viewport.height + 'px';
     canvas.dataset.page = pageNum;
 
     pdfContainer.appendChild(canvas);
 
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
     await page.render({
-      canvasContext: canvas.getContext('2d'),
+      canvasContext: ctx,
       viewport,
     }).promise;
   }
