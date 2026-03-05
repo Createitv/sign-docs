@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import * as pdfjsLib from 'pdfjs-dist';
 import PDFWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import mammoth from 'mammoth';
+import { renderAsync } from 'docx-preview';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -73,19 +73,15 @@ function loadStampCfg() {
 // ===== 缓存：签名 =====
 function saveSignatureCache() {
   try {
-    localStorage.setItem(CACHE_SIG, sigCanvas.toDataURL('image/png'));
+    if (sigCachedImage) localStorage.setItem(CACHE_SIG, sigCachedImage);
   } catch (_) {}
 }
 
 function loadSignatureCache() {
   const src = localStorage.getItem(CACHE_SIG);
   if (!src) return;
-  const img = new Image();
-  img.onload = () => {
-    const dpr = window.devicePixelRatio || 1;
-    sigCtx.drawImage(img, 0, 0, sigCanvas.width / dpr, sigCanvas.height / dpr);
-  };
-  img.src = src;
+  sigCachedImage = src;
+  updateSigPreview();
 }
 
 // ===== base64 工具（浏览器模式用）=====
@@ -233,12 +229,10 @@ async function renderDocx(base64, fileName) {
   const bytes = new Uint8Array(binaryStr.length);
   for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-  const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
-
   const docContent = document.getElementById('docContent');
-  docContent.innerHTML = result.value;
+  docContent.innerHTML = '';
   docContent.style.display = 'block';
-  docContent.contentEditable = 'true';
+  docContent.contentEditable = 'false';
 
   const pdfContainer = document.getElementById('pdfContainer');
   pdfContainer.style.display = 'none';
@@ -246,9 +240,21 @@ async function renderDocx(base64, fileName) {
 
   document.querySelectorAll('.placed-stamp, .placed-signature, .placed-text-box').forEach(el => el.remove());
 
+  await renderAsync(bytes.buffer, docContent, null, {
+    className: 'docx',
+    inWrapper: true,
+    ignoreWidth: false,
+    ignoreHeight: false,
+    breakPages: true,
+    renderHeaders: true,
+    renderFooters: true,
+    renderFootnotes: true,
+    renderEndnotes: true,
+  });
+
   currentMode = 'docx';
   pdfDoc = null;
-  document.getElementById('editToolCard').style.opacity = '1';
+  document.getElementById('editToolCard').style.opacity = '0.5';
   setFileInfo(`📝 ${fileName}`);
   showToast('Word 文档已打开');
 }
@@ -408,55 +414,144 @@ document.getElementById('stampSize').addEventListener('input', function () {
   document.getElementById('stampSizeVal').textContent = this.value + 'px';
 });
 
-// ===== 签名画板 =====
+// ===== 签名画板（弹窗模式 + 平滑笔迹）=====
 const sigCanvas = document.getElementById('sigCanvas');
 const sigCtx = sigCanvas.getContext('2d');
+let sigPoints = [];       // 当前笔划的坐标点
+let sigCachedImage = null; // 缓存的签名图片 data URL
 
 function initSigCtx() {
-  sigCtx.lineWidth = 2.5;
   sigCtx.lineCap = 'round';
   sigCtx.lineJoin = 'round';
   sigCtx.strokeStyle = sigColor;
 }
 
 function resizeSigCanvas() {
-  const rect = sigCanvas.parentElement.getBoundingClientRect();
+  const wrap = sigCanvas.parentElement;
+  if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  if (rect.width === 0) return; // modal 还没显示
   const dpr = window.devicePixelRatio || 1;
+  const h = 260;
   sigCanvas.width  = Math.floor(rect.width) * dpr;
-  sigCanvas.height = 140 * dpr;
-  sigCanvas.style.height = '140px';
+  sigCanvas.height = h * dpr;
+  sigCanvas.style.height = h + 'px';
   sigCtx.scale(dpr, dpr);
   initSigCtx();
 }
 
-resizeSigCanvas();
-window.addEventListener('resize', resizeSigCanvas);
+// --- 打开 / 关闭签名弹窗 ---
+window.openSignaturePad = function () {
+  document.getElementById('sigModal').classList.add('show');
+  // 等弹窗渲染后再初始化 canvas 尺寸
+  requestAnimationFrame(() => {
+    resizeSigCanvas();
+    // 如果有缓存签名则恢复
+    if (sigCachedImage) {
+      const img = new Image();
+      img.onload = () => {
+        const dpr = window.devicePixelRatio || 1;
+        sigCtx.drawImage(img, 0, 0, sigCanvas.width / dpr, sigCanvas.height / dpr);
+      };
+      img.src = sigCachedImage;
+    }
+  });
+};
 
+window.closeSignaturePad = function () {
+  document.getElementById('sigModal').classList.remove('show');
+};
+
+window.confirmSignature = function () {
+  const data = sigCtx.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
+  const hasContent = Array.from(data).some((v, i) => i % 4 === 3 && v > 0);
+  if (!hasContent) { showToast('请先手写签名'); return; }
+
+  sigCachedImage = sigCanvas.toDataURL('image/png');
+  updateSigPreview();
+  saveSignatureCache();
+  closeSignaturePad();
+  showToast('签名已保存');
+};
+
+function updateSigPreview() {
+  const area = document.getElementById('sigPreview');
+  if (sigCachedImage) {
+    area.innerHTML = `<img src="${sigCachedImage}" alt="签名">`;
+  } else {
+    area.innerHTML = '<span class="placeholder">点击此处签名</span>';
+  }
+}
+
+// --- 平滑笔迹绘制 ---
 function getPos(e) {
   const rect = sigCanvas.getBoundingClientRect();
   const t = e.touches ? e.touches[0] : e;
-  return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+  return { x: t.clientX - rect.left, y: t.clientY - rect.top, time: Date.now() };
 }
 
-sigCanvas.addEventListener('mousedown', (e) => {
-  isDrawing = true; sigCtx.beginPath();
-  const p = getPos(e); sigCtx.moveTo(p.x, p.y);
-});
-sigCanvas.addEventListener('mousemove', (e) => {
+function getLineWidth(p1, p2) {
+  const dt = p2.time - p1.time || 1;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const speed = Math.sqrt(dx * dx + dy * dy) / dt;
+  // 速度越快线越细，速度越慢线越粗
+  const width = Math.max(1.5, Math.min(5, 4 - speed * 2));
+  return width;
+}
+
+function drawSmoothLine() {
+  if (sigPoints.length < 2) return;
+  sigCtx.beginPath();
+  sigCtx.strokeStyle = sigColor;
+
+  if (sigPoints.length === 2) {
+    const p0 = sigPoints[0], p1 = sigPoints[1];
+    sigCtx.lineWidth = getLineWidth(p0, p1);
+    sigCtx.moveTo(p0.x, p0.y);
+    sigCtx.lineTo(p1.x, p1.y);
+  } else {
+    // 使用二次贝塞尔曲线平滑
+    const last = sigPoints.length - 1;
+    const p0 = sigPoints[last - 2];
+    const p1 = sigPoints[last - 1];
+    const p2 = sigPoints[last];
+    const midX = (p1.x + p2.x) / 2;
+    const midY = (p1.y + p2.y) / 2;
+    sigCtx.lineWidth = getLineWidth(p1, p2);
+    sigCtx.moveTo((p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+    sigCtx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+  }
+  sigCtx.stroke();
+}
+
+function onSigDown(e) {
+  e.preventDefault();
+  isDrawing = true;
+  const p = getPos(e);
+  sigPoints = [p];
+}
+
+function onSigMove(e) {
+  e.preventDefault();
   if (!isDrawing) return;
-  const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
-});
-sigCanvas.addEventListener('mouseup',    () => { isDrawing = false; });
-sigCanvas.addEventListener('mouseleave', () => { isDrawing = false; });
-sigCanvas.addEventListener('touchstart', (e) => {
-  e.preventDefault(); isDrawing = true; sigCtx.beginPath();
-  const p = getPos(e); sigCtx.moveTo(p.x, p.y);
-}, { passive: false });
-sigCanvas.addEventListener('touchmove', (e) => {
-  e.preventDefault(); if (!isDrawing) return;
-  const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
-}, { passive: false });
-sigCanvas.addEventListener('touchend', () => { isDrawing = false; });
+  const p = getPos(e);
+  sigPoints.push(p);
+  drawSmoothLine();
+}
+
+function onSigUp() {
+  isDrawing = false;
+  sigPoints = [];
+}
+
+sigCanvas.addEventListener('mousedown', onSigDown);
+sigCanvas.addEventListener('mousemove', onSigMove);
+sigCanvas.addEventListener('mouseup', onSigUp);
+sigCanvas.addEventListener('mouseleave', onSigUp);
+sigCanvas.addEventListener('touchstart', onSigDown, { passive: false });
+sigCanvas.addEventListener('touchmove', onSigMove, { passive: false });
+sigCanvas.addEventListener('touchend', onSigUp);
 
 window.setSigColor = function (c, el) {
   sigColor = c;
@@ -468,22 +563,19 @@ window.setSigColor = function (c, el) {
 window.clearSignature = function () {
   const dpr = window.devicePixelRatio || 1;
   sigCtx.clearRect(0, 0, sigCanvas.width / dpr, sigCanvas.height / dpr);
+  sigCachedImage = null;
+  updateSigPreview();
   localStorage.removeItem(CACHE_SIG);
 };
 
 window.placeSignature = function () {
-  const data = sigCtx.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
-  const hasContent = Array.from(data).some((v, i) => i % 4 === 3 && v > 0);
-  if (!hasContent) { showToast('请先手写签名'); return; }
-
-  const imgData = sigCanvas.toDataURL('image/png');
-  saveSignatureCache();            // 放置时缓存签名
+  if (!sigCachedImage) { showToast('请先手写签名'); return; }
 
   const page = document.getElementById('docPage');
   const el = document.createElement('div');
   el.className = 'placed-signature';
-  el.style.cssText = 'width:180px;height:65px;right:80px;bottom:60px;';
-  el.innerHTML = `<img src="${imgData}" alt="签名"><button class="remove-btn" onclick="this.parentElement.remove()">✕</button>`;
+  el.style.cssText = 'width:200px;height:72px;right:80px;bottom:60px;';
+  el.innerHTML = `<img src="${sigCachedImage}" alt="签名"><button class="remove-btn" onclick="this.parentElement.remove()">✕</button>`;
   makeDraggable(el, page);
   page.appendChild(el);
   showToast('签名已放置到文档');
@@ -586,8 +678,6 @@ window.exportPDF = async function () {
 };
 
 // ===== 初始化 =====
-resizeSigCanvas();
-initSigCtx();
 loadStampCache();        // 恢复上次公章
-loadSignatureCache();    // 恢复上次签名到画板
+loadSignatureCache();    // 恢复上次签名预览
 document.getElementById('docContent').focus();

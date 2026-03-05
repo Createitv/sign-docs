@@ -83,14 +83,8 @@
       <!-- Signature -->
       <div class="tool-card">
         <h3><span class="icon icon-sign">✒</span> 手写签名</h3>
-        <div class="sig-color-row">
-          笔色：
-          <div class="sig-color-dot active" style="background:#1a1a2e" onclick="setSigColor('#1a1a2e', this)"></div>
-          <div class="sig-color-dot" style="background:#c0392b" onclick="setSigColor('#c0392b', this)"></div>
-          <div class="sig-color-dot" style="background:#2980b9" onclick="setSigColor('#2980b9', this)"></div>
-        </div>
-        <div class="sig-canvas-wrap">
-          <canvas id="sigCanvas" width="460" height="140"></canvas>
+        <div class="sig-preview-area" id="sigPreview" onclick="openSignaturePad()">
+          <span class="placeholder">点击此处签名</span>
         </div>
         <div class="btn-group">
           <button class="btn btn-secondary" onclick="clearSignature()">清除</button>
@@ -98,10 +92,14 @@
         </div>
       </div>
 
+      <div class="tool-divider"></div>
+
       <!-- Export -->
       <div class="tool-card">
-        <h3><span class="icon icon-pdf">⬇</span> 导出</h3>
-        <button class="btn btn-export" onclick="exportPDF()">生 成 PDF 文 件</button>
+        <h3><span class="icon icon-pdf">↓</span> 导出</h3>
+        <div style="padding: 0 4px;">
+          <button class="btn btn-export" onclick="exportPDF()">导出为 PDF</button>
+        </div>
       </div>
 
     </div>
@@ -131,6 +129,29 @@
       <div class="gen-stamp-actions">
         <button class="btn btn-secondary" onclick="closeGenStamp()">取消</button>
         <button class="btn btn-primary" onclick="useGenStamp()">使用此公章</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Signature Modal -->
+  <div class="sig-modal" id="sigModal">
+    <div class="sig-modal-box">
+      <div class="sig-modal-header">
+        <h3>✒ 手写签名</h3>
+        <div class="sig-modal-colors">
+          笔色：
+          <div class="sig-color-dot active" style="background:#1a1a2e" onclick="setSigColor('#1a1a2e', this)"></div>
+          <div class="sig-color-dot" style="background:#c0392b" onclick="setSigColor('#c0392b', this)"></div>
+          <div class="sig-color-dot" style="background:#2980b9" onclick="setSigColor('#2980b9', this)"></div>
+        </div>
+      </div>
+      <div class="sig-canvas-wrap">
+        <canvas id="sigCanvas"></canvas>
+      </div>
+      <div class="sig-modal-actions">
+        <button class="btn btn-secondary" onclick="clearSignature()">清除重签</button>
+        <button class="btn btn-secondary" onclick="closeSignaturePad()">取消</button>
+        <button class="btn btn-primary" onclick="confirmSignature()">确认签名</button>
       </div>
     </div>
   </div>
